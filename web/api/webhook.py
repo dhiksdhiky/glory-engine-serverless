@@ -301,8 +301,22 @@ class handler(BaseHTTPRequestHandler):
             # Initialize & process update within single event loop (Vercel max 10s execution)
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(app.initialize())
-            loop.run_until_complete(app.process_update(update))
+            
+            async def handle_update():
+                try:
+                    await app.initialize()
+                except RuntimeError:
+                    pass # Already initialized in Vercel warm container
+                
+                await app.process_update(update)
+                
+                # Await pending background tasks before returning HTTP 200
+                # because Vercel freezes the container immediately after return.
+                pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+                if pending:
+                    await asyncio.wait(pending)
+            
+            loop.run_until_complete(handle_update())
             
             self.send_response(200)
             self.send_header('Content-type', 'application/json')

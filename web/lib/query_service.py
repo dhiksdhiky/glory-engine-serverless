@@ -413,17 +413,17 @@ def get_market_info(db: Session) -> str:
     report_lines.append("⚠️ *ERROR LOGS (48 Jam Terakhir)*")
     
     if err_harv > 0:
-        report_lines.append(f"• Harvester      : {err_harv} Warning 🟡 (/err\_harvester)")
+        report_lines.append(f"• Harvester      : {err_harv} Warning 🟡 (/err_harvester)")
     else:
         report_lines.append("• Harvester      : 0 Error 🟢")
         
     if err_pipe > 0:
-        report_lines.append(f"• Pipeline       : {err_pipe} Warning 🟡 (/err\_pipeline)")
+        report_lines.append(f"• Pipeline       : {err_pipe} Warning 🟡 (/err_pipeline)")
     else:
         report_lines.append("• Pipeline       : 0 Error 🟢")
         
     if err_bndr > 0:
-        report_lines.append(f"• Bandar Satu    : {err_bndr} Warning 🟡 (/err\_bandar)")
+        report_lines.append(f"• Bandar Satu    : {err_bndr} Warning 🟡 (/err_bandar)")
     else:
         report_lines.append("• Bandar Satu    : 0 Error 🟢")
 
