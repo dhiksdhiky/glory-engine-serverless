@@ -151,7 +151,7 @@ def run_pipeline():
     # ── Setup waktu ─────────────────────────────────────────
     now_jkt = datetime.now(JKT_TZ)
     api_end_date = now_jkt.date() + timedelta(days=1)
-    min_date = now_jkt.date() - timedelta(days=LOOKBACK_DAYS)
+    min_date = now_jkt.date().replace(day=1)  # Fix: Selalu mulai dari tanggal 1 bulan berjalan
 
     try:
         master_calendar = get_master_calendar(min_date, api_end_date)
