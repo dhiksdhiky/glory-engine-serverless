@@ -9,61 +9,139 @@ const formatVol = (val) => {
     return val >= 1000000 ? (val/1000000).toFixed(1) + 'M' : val.toLocaleString('id-ID');
 };
 
-const renderHarga = (data) => {
+let currentChart = null;
+
+const renderHargaChart = (data) => {
     if (!data || data.length === 0) return '<div class="empty-state">Tidak ada data harga saham hari ini.</div>';
     
-    let html = `
-    <div class="data-table">
-        <div class="table-header">
-            <div>KODE</div>
-            <div>HARGA</div>
-            <div>%CHG</div>
-            <div style="text-align: right;">VOL</div>
-        </div>
+    // Sort by volume descending and take top 10
+    const topVol = [...data].sort((a, b) => b.volume - a.volume).slice(0, 10);
+    
+    const labels = topVol.map(d => d.kode);
+    const volumes = topVol.map(d => d.volume);
+    
+    const html = `
+    <div class="chart-container">
+        <h3 class="chart-title">🔥 Top 10 Volume Terbesar</h3>
+        <canvas id="hargaChart" height="300"></canvas>
+    </div>
     `;
-    data.forEach(item => {
-        const isPos = item.chg_pct > 0;
-        const isNeg = item.chg_pct < 0;
-        const badgeClass = isPos ? 'badge-green' : (isNeg ? 'badge-red' : 'badge-gray');
-        const sign = isPos ? '+' : '';
+    
+    // We must return the HTML first so it gets injected into the DOM
+    // Then we initialize the chart in a timeout
+    setTimeout(() => {
+        const ctx = document.getElementById('hargaChart').getContext('2d');
+        if (currentChart) currentChart.destroy();
         
-        html += `
-        <div class="table-row">
-            <div class="ticker-code">${item.kode}</div>
-            <div class="price-val">${formatPrice(item.harga)}</div>
-            <div><span class="badge ${badgeClass}">${sign}${item.chg_pct}%</span></div>
-            <div style="text-align: right; color: var(--text-muted);">${formatVol(item.volume)}</div>
-        </div>`;
-    });
-    html += '</div>';
+        currentChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Volume',
+                    data: volumes,
+                    backgroundColor: 'rgba(56, 189, 248, 0.7)',
+                    borderColor: 'rgba(56, 189, 248, 1)',
+                    borderWidth: 1,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => formatVol(ctx.raw)
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#94A3B8', callback: (val) => formatVol(val) },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    x: {
+                        ticks: { color: '#F8FAFC', font: { weight: 'bold' } },
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }, 50);
+
     return html;
 };
 
-const renderBroker = (data) => {
+const renderBrokerChart = (data) => {
     if (!data || data.length === 0) return '<div class="empty-state">Tidak ada data broker summary hari ini.</div>';
     
-    let html = `
-    <div class="data-table">
-        <div class="table-header table-header-broker">
-            <div>BROKER</div>
-            <div>NET VOL</div>
-            <div style="text-align: right;">NET VALUE</div>
-        </div>
+    // Top 10 Net Buy/Sell
+    const topBrokers = [...data].slice(0, 12);
+    
+    const labels = topBrokers.map(d => d.broker);
+    const netVals = topBrokers.map(d => d.net_val);
+    const bgColors = netVals.map(v => v > 0 ? 'rgba(52, 211, 153, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+    const borderColors = netVals.map(v => v > 0 ? 'rgba(52, 211, 153, 1)' : 'rgba(248, 113, 113, 1)');
+    
+    const html = `
+    <div class="chart-container">
+        <h3 class="chart-title">🏢 Top Broker Akumulasi vs Distribusi</h3>
+        <canvas id="brokerChart" height="350"></canvas>
+    </div>
     `;
-    data.forEach(item => {
-        const isAccum = item.net_val > 0;
-        const colorClass = isAccum ? 'var(--green)' : 'var(--red)';
-        const valStr = (item.net_val / 1000000000).toFixed(1) + 'B';
-        const sign = isAccum ? '+' : '';
+    
+    setTimeout(() => {
+        const ctx = document.getElementById('brokerChart').getContext('2d');
+        if (currentChart) currentChart.destroy();
         
-        html += `
-        <div class="table-row table-row-broker">
-            <div class="ticker-code" style="color: ${colorClass};">${item.broker}</div>
-            <div class="price-val">${formatPrice(item.net_vol)}</div>
-            <div style="text-align: right; font-weight: 700; color: ${colorClass};">${sign}${valStr}</div>
-        </div>`;
-    });
-    html += '</div>';
+        currentChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Net Value (Rp)',
+                    data: netVals,
+                    backgroundColor: bgColors,
+                    borderColor: borderColors,
+                    borderWidth: 1,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => {
+                                const valStr = (Math.abs(ctx.raw) / 1000000000).toFixed(1) + ' B';
+                                return ctx.raw > 0 ? '+ ' + valStr : '- ' + valStr;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: {
+                            color: '#94A3B8',
+                            callback: (val) => (val / 1000000000).toFixed(0) + 'B'
+                        }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: { color: '#F8FAFC', font: { weight: 'bold' } }
+                    }
+                }
+            }
+        });
+    }, 50);
+    
     return html;
 };
 
@@ -143,9 +221,9 @@ const loadData = async (tab) => {
         
         if (result.status === 'success') {
             if (tab === 'harga') {
-                contentDiv.innerHTML = renderHarga(result.data);
+                contentDiv.innerHTML = renderHargaChart(result.data);
             } else if (tab === 'broker') {
-                contentDiv.innerHTML = renderBroker(result.data);
+                contentDiv.innerHTML = renderBrokerChart(result.data);
             }
         } else {
             contentDiv.innerHTML = `<div class="error">Error: ${result.error || 'Terjadi kesalahan'}</div>`;
