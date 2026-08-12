@@ -54,7 +54,7 @@ const renderHargaChart = (data) => {
                     legend: { display: false },
                     tooltip: {
                         callbacks: {
-                            label: (ctx) => \`\${ctx.raw} Ticker\`
+                            label: (ctx) => `${ctx.raw} Ticker`
                         }
                     }
                 },
@@ -117,7 +117,7 @@ const renderBrokerChart = (data) => {
                     legend: { display: false },
                     tooltip: {
                         callbacks: {
-                            label: (ctx) => \`\${ctx.raw} Ticker\`
+                            label: (ctx) => `${ctx.raw} Ticker`
                         }
                     }
                 },
