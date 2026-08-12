@@ -3,7 +3,7 @@ import io
 import re
 from datetime import datetime, date
 from sqlalchemy.orm import Session
-from database import Saham
+from lib.database import Saham
 
 def _parse_idx_date(date_str) -> date | None:
     if pd.isna(date_str):
