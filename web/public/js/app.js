@@ -10,7 +10,7 @@ const formatVol = (val) => {
 };
 
 const renderHarga = (data) => {
-    if (!data || data.length === 0) return '<div class="empty">Tidak ada data harga saham.</div>';
+    if (!data || data.length === 0) return '<div class="empty-state">Tidak ada data harga saham hari ini.</div>';
     
     let html = `
     <div class="data-table">
@@ -18,18 +18,21 @@ const renderHarga = (data) => {
             <div>KODE</div>
             <div>HARGA</div>
             <div>%CHG</div>
-            <div>VOL</div>
+            <div style="text-align: right;">VOL</div>
         </div>
     `;
     data.forEach(item => {
-        const colorClass = item.chg_pct > 0 ? 'text-green' : (item.chg_pct < 0 ? 'text-red' : 'text-gray');
-        const sign = item.chg_pct > 0 ? '+' : '';
+        const isPos = item.chg_pct > 0;
+        const isNeg = item.chg_pct < 0;
+        const badgeClass = isPos ? 'badge-green' : (isNeg ? 'badge-red' : 'badge-gray');
+        const sign = isPos ? '+' : '';
+        
         html += `
         <div class="table-row">
-            <div><strong>${item.kode}</strong></div>
-            <div>${formatPrice(item.harga)}</div>
-            <div class="${colorClass}">${sign}${item.chg_pct}%</div>
-            <div>${formatVol(item.volume)}</div>
+            <div class="ticker-code">${item.kode}</div>
+            <div class="price-val">${formatPrice(item.harga)}</div>
+            <div><span class="badge ${badgeClass}">${sign}${item.chg_pct}%</span></div>
+            <div style="text-align: right; color: var(--text-muted);">${formatVol(item.volume)}</div>
         </div>`;
     });
     html += '</div>';
@@ -37,25 +40,27 @@ const renderHarga = (data) => {
 };
 
 const renderBroker = (data) => {
-    if (!data || data.length === 0) return '<div class="empty">Tidak ada data broker summary.</div>';
+    if (!data || data.length === 0) return '<div class="empty-state">Tidak ada data broker summary hari ini.</div>';
     
     let html = `
     <div class="data-table">
-        <div class="table-header">
-            <div>BRK</div>
+        <div class="table-header table-header-broker">
+            <div>BROKER</div>
             <div>NET VOL</div>
-            <div>NET VAL</div>
+            <div style="text-align: right;">NET VALUE</div>
         </div>
     `;
     data.forEach(item => {
         const isAccum = item.net_val > 0;
-        const colorClass = isAccum ? 'text-green' : 'text-red';
-        const valStr = (item.net_val / 1000000000).toFixed(1) + ' B';
+        const colorClass = isAccum ? 'var(--green)' : 'var(--red)';
+        const valStr = (item.net_val / 1000000000).toFixed(1) + 'B';
+        const sign = isAccum ? '+' : '';
+        
         html += `
-        <div class="table-row">
-            <div><strong>${item.broker}</strong></div>
-            <div>${formatPrice(item.net_vol)}</div>
-            <div class="${colorClass}">${valStr}</div>
+        <div class="table-row table-row-broker">
+            <div class="ticker-code" style="color: ${colorClass};">${item.broker}</div>
+            <div class="price-val">${formatPrice(item.net_vol)}</div>
+            <div style="text-align: right; font-weight: 700; color: ${colorClass};">${sign}${valStr}</div>
         </div>`;
     });
     html += '</div>';
@@ -64,13 +69,17 @@ const renderBroker = (data) => {
 
 const renderUpload = () => {
     return `
-    <div class="upload-container" style="padding: 20px; text-align: center;">
-        <h2>Upload Data IDX</h2>
-        <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Pilih file .xlsx dari IDX untuk bulk replace database.</p>
-        <input type="file" id="excelFile" accept=".xlsx" style="margin-bottom: 20px; color: white;" />
-        <br/>
-        <button id="uploadBtn" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: bold;">Mulai Upload</button>
-        <div id="uploadStatus" style="margin-top: 20px; font-weight: bold;"></div>
+    <div class="upload-glass">
+        <h2>Update Master Saham</h2>
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 24px;">Upload daftar saham terbaru dari situs Bursa Efek Indonesia (.xlsx)</p>
+        
+        <input type="file" id="excelFile" accept=".xlsx" />
+        
+        <button id="uploadBtn" class="btn-primary">
+            Sync Database
+        </button>
+        
+        <div id="uploadStatus" style="margin-top: 24px; font-weight: 500; font-size: 14px;"></div>
     </div>
     `;
 };
@@ -116,7 +125,11 @@ const setupUploadEvent = () => {
 };
 
 const loadData = async (tab) => {
-    contentDiv.innerHTML = '<div class="loading">Loading data...</div>';
+    contentDiv.innerHTML = `
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p>Fetching market data...</p>
+      </div>`;
     
     if (tab === 'upload') {
         contentDiv.innerHTML = renderUpload();
