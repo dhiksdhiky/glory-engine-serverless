@@ -133,7 +133,12 @@ def setup_tables():
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS daftar_saham (
                         kode TEXT PRIMARY KEY,
-                        nama TEXT
+                        no INTEGER,
+                        nama_perusahaan TEXT NOT NULL,
+                        tanggal_pencatatan DATE,
+                        saham INTEGER,
+                        papan_pencatatan TEXT,
+                        tanggal_update DATE
                     )
                 """))
                 conn.execute(text("""
@@ -144,6 +149,29 @@ def setup_tables():
                         open REAL, high REAL, low REAL, close REAL,
                         volume INTEGER,
                         UNIQUE (ticker, tanggal)
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS open_positions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ticker TEXT NOT NULL,
+                        entry_date DATE NOT NULL,
+                        entry_price REAL NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        current_trailing_stop REAL NOT NULL,
+                        last_updated DATE NOT NULL
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS trade_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ticker TEXT NOT NULL,
+                        entry_date DATE NOT NULL,
+                        entry_price REAL NOT NULL,
+                        exit_date DATE NOT NULL,
+                        exit_price REAL NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        profit_loss_percent REAL NOT NULL
                     )
                 """))
                 conn.execute(text("""
@@ -179,7 +207,12 @@ def setup_tables():
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS daftar_saham (
                         kode VARCHAR(10) PRIMARY KEY,
-                        nama VARCHAR(255)
+                        no INTEGER,
+                        nama_perusahaan VARCHAR(255) NOT NULL,
+                        tanggal_pencatatan DATE,
+                        saham BIGINT,
+                        papan_pencatatan VARCHAR(50),
+                        tanggal_update DATE
                     )
                 """))
                 conn.execute(text("""
@@ -191,6 +224,29 @@ def setup_tables():
                         low NUMERIC(20,4), close NUMERIC(20,4),
                         volume BIGINT,
                         UNIQUE (ticker, tanggal)
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS open_positions (
+                        id SERIAL PRIMARY KEY,
+                        ticker VARCHAR(10) NOT NULL,
+                        entry_date DATE NOT NULL,
+                        entry_price FLOAT NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        current_trailing_stop FLOAT NOT NULL,
+                        last_updated DATE NOT NULL
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS trade_history (
+                        id SERIAL PRIMARY KEY,
+                        ticker VARCHAR(10) NOT NULL,
+                        entry_date DATE NOT NULL,
+                        entry_price FLOAT NOT NULL,
+                        exit_date DATE NOT NULL,
+                        exit_price FLOAT NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        profit_loss_percent FLOAT NOT NULL
                     )
                 """))
                 conn.execute(text("""

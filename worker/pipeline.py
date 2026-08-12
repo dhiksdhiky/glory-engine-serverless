@@ -64,10 +64,10 @@ def get_tickers() -> list:
                             nama = df.loc[df["Kode"].str.strip() == kode, "Nama Perusahaan"].values
                             nama_str = nama[0] if len(nama) > 0 else ""
                             conn.execute(text(
-                                "INSERT OR IGNORE INTO daftar_saham (kode, nama) "
+                                "INSERT OR IGNORE INTO daftar_saham (kode, nama_perusahaan) "
                                 "VALUES (:kode, :nama)"
                             ) if get_dialect() == "sqlite" else text(
-                                "INSERT INTO daftar_saham (kode, nama) "
+                                "INSERT INTO daftar_saham (kode, nama_perusahaan) "
                                 "VALUES (:kode, :nama) ON CONFLICT (kode) DO NOTHING"
                             ), {"kode": kode, "nama": nama_str})
                 logger.info(f"✅ {len(tickers)} ticker di-seed ke daftar_saham.")
