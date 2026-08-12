@@ -91,16 +91,16 @@ def get_tickers() -> list:
 
 
 def get_master_calendar(start_date: date, end_date: date) -> pd.DatetimeIndex:
-    """Unduh kalender bursa IHSG (^JKSE) sebagai acuan hari trading."""
-    logger.info("📅 Mengunduh Kalender Bursa (IHSG/^JKSE)...")
+    """Unduh kalender bursa sebagai acuan hari trading (menggunakan BBCA.JK karena ^JKSE sering error di Yahoo)."""
+    logger.info("📅 Mengunduh Kalender Bursa (BBCA.JK)...")
     try:
-        ihsg = yf.download('^JKSE', start=start_date, end=end_date, progress=False)
+        ihsg = yf.download('BBCA.JK', start=start_date, end=end_date, progress=False)
         if ihsg.empty:
-            raise ValueError("Data IHSG kosong dari yfinance.")
+            raise ValueError("Data kalender kosong dari yfinance.")
         logger.info(f"📅 Kalender bursa dimuat: {len(ihsg)} hari trading.")
         return ihsg.index
     except Exception as e:
-        logger.error(f"❌ Gagal unduh kalender IHSG: {e}")
+        logger.error(f"❌ Gagal unduh kalender bursa: {e}")
         raise
 
 
