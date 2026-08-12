@@ -37,7 +37,7 @@ class handler(BaseHTTPRequestHandler):
                 results = db.execute(sql, {"start_date": start_date}).fetchall()
                 data = [
                     {
-                        "date": r.tanggal,
+                        "date": str(r.tanggal),
                         "total": int(r.total)
                     } for r in results
                 ]
@@ -52,7 +52,7 @@ class handler(BaseHTTPRequestHandler):
                 results = db.execute(sql, {"start_date": start_date}).fetchall()
                 data = [
                     {
-                        "date": r.date,
+                        "date": str(r.date),
                         "total": int(r.total)
                     } for r in results
                 ]
