@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Stock Engine PWA</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#1a1a1a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+  <div class="header">
+    <h1>📈 Stock Engine</h1>
+  </div>
+  
+  <div class="content" id="app-content">
+    <div class="loading">Loading data...</div>
+  </div>
+
+  <div class="bottom-bar">
+    <button class="nav-btn active">Screener</button>
+    <button class="nav-btn">Broker</button>
+    <button class="nav-btn">Archive</button>
+  </div>
+
+  <script src="./js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('SW Registered', reg))
+          .catch(err => console.log('SW Failed', err));
+      });
+    }
+  </script>
+</body>
+</html>
