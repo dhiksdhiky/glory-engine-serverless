@@ -13,6 +13,14 @@ class handler(BaseHTTPRequestHandler):
         query_components = parse_qs(urlparse(self.path).query)
         action = query_components.get("action", [""])[0]
         
+        if not SessionLocal:
+            self.send_response(500)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({'error': "DATABASE_URL environment variable is not set in Vercel"}).encode('utf-8'))
+            return
+            
         db = SessionLocal()
         try:
             if action == "hmb":
