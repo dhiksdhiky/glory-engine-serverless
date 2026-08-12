@@ -12,23 +12,24 @@ const formatVol = (val) => {
 let currentChart = null;
 
 const renderHargaChart = (data) => {
-    if (!data || data.length === 0) return '<div class="empty-state">Tidak ada data harga saham hari ini.</div>';
+    if (!data || data.length === 0) return '<div class="empty-state">Belum ada tarikan data OHLC 30 hari terakhir.</div>';
     
-    // Sort by volume descending and take top 10
-    const topVol = [...data].sort((a, b) => b.volume - a.volume).slice(0, 10);
+    const labels = data.map(d => d.date);
+    const totals = data.map(d => d.total);
     
-    const labels = topVol.map(d => d.kode);
-    const volumes = topVol.map(d => d.volume);
+    // Warn if any day drops below typical threshold (e.g., 900 tickers)
+    // Adjust colors dynamically based on completeness
+    const bgColors = totals.map(t => t >= 800 ? 'rgba(52, 211, 153, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+    const borderColors = totals.map(t => t >= 800 ? 'rgba(52, 211, 153, 1)' : 'rgba(248, 113, 113, 1)');
     
     const html = `
     <div class="chart-container">
-        <h3 class="chart-title">🔥 Top 10 Volume Terbesar</h3>
+        <h3 class="chart-title">📈 Monitor Data OHLC (30 Hari)</h3>
+        <p style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: -10px; margin-bottom: 20px;">Jumlah Ticker Terunduh per Hari</p>
         <canvas id="hargaChart" height="300"></canvas>
     </div>
     `;
     
-    // We must return the HTML first so it gets injected into the DOM
-    // Then we initialize the chart in a timeout
     setTimeout(() => {
         const ctx = document.getElementById('hargaChart').getContext('2d');
         if (currentChart) currentChart.destroy();
@@ -38,12 +39,12 @@ const renderHargaChart = (data) => {
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Volume',
-                    data: volumes,
-                    backgroundColor: 'rgba(56, 189, 248, 0.7)',
-                    borderColor: 'rgba(56, 189, 248, 1)',
+                    label: 'Total Ticker',
+                    data: totals,
+                    backgroundColor: bgColors,
+                    borderColor: borderColors,
                     borderWidth: 1,
-                    borderRadius: 6
+                    borderRadius: 4
                 }]
             },
             options: {
@@ -53,18 +54,18 @@ const renderHargaChart = (data) => {
                     legend: { display: false },
                     tooltip: {
                         callbacks: {
-                            label: (ctx) => formatVol(ctx.raw)
+                            label: (ctx) => \`\${ctx.raw} Ticker\`
                         }
                     }
                 },
                 scales: {
                     y: {
                         beginAtZero: true,
-                        ticks: { color: '#94A3B8', callback: (val) => formatVol(val) },
+                        ticks: { color: '#94A3B8' },
                         grid: { color: 'rgba(255,255,255,0.05)' }
                     },
                     x: {
-                        ticks: { color: '#F8FAFC', font: { weight: 'bold' } },
+                        ticks: { color: '#F8FAFC', font: { size: 10 } },
                         grid: { display: false }
                     }
                 }
@@ -76,20 +77,19 @@ const renderHargaChart = (data) => {
 };
 
 const renderBrokerChart = (data) => {
-    if (!data || data.length === 0) return '<div class="empty-state">Tidak ada data broker summary hari ini.</div>';
+    if (!data || data.length === 0) return '<div class="empty-state">Belum ada tarikan data Broksum 30 hari terakhir.</div>';
     
-    // Top 10 Net Buy/Sell
-    const topBrokers = [...data].slice(0, 12);
+    const labels = data.map(d => d.date);
+    const totals = data.map(d => d.total);
     
-    const labels = topBrokers.map(d => d.broker);
-    const netVals = topBrokers.map(d => d.net_val);
-    const bgColors = netVals.map(v => v > 0 ? 'rgba(52, 211, 153, 0.7)' : 'rgba(248, 113, 113, 0.7)');
-    const borderColors = netVals.map(v => v > 0 ? 'rgba(52, 211, 153, 1)' : 'rgba(248, 113, 113, 1)');
+    const bgColors = totals.map(t => t >= 800 ? 'rgba(56, 189, 248, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+    const borderColors = totals.map(t => t >= 800 ? 'rgba(56, 189, 248, 1)' : 'rgba(248, 113, 113, 1)');
     
     const html = `
     <div class="chart-container">
-        <h3 class="chart-title">🏢 Top Broker Akumulasi vs Distribusi</h3>
-        <canvas id="brokerChart" height="350"></canvas>
+        <h3 class="chart-title">🏢 Monitor Data Broksum (30 Hari)</h3>
+        <p style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: -10px; margin-bottom: 20px;">Jumlah Ticker Terunduh per Hari</p>
+        <canvas id="brokerChart" height="300"></canvas>
     </div>
     `;
     
@@ -102,40 +102,34 @@ const renderBrokerChart = (data) => {
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Net Value (Rp)',
-                    data: netVals,
+                    label: 'Total Ticker',
+                    data: totals,
                     backgroundColor: bgColors,
                     borderColor: borderColors,
                     borderWidth: 1,
-                    borderRadius: 6
+                    borderRadius: 4
                 }]
             },
             options: {
-                indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
                     tooltip: {
                         callbacks: {
-                            label: (ctx) => {
-                                const valStr = (Math.abs(ctx.raw) / 1000000000).toFixed(1) + ' B';
-                                return ctx.raw > 0 ? '+ ' + valStr : '- ' + valStr;
-                            }
+                            label: (ctx) => \`\${ctx.raw} Ticker\`
                         }
                     }
                 },
                 scales: {
-                    x: {
-                        grid: { color: 'rgba(255,255,255,0.05)' },
-                        ticks: {
-                            color: '#94A3B8',
-                            callback: (val) => (val / 1000000000).toFixed(0) + 'B'
-                        }
-                    },
                     y: {
-                        grid: { display: false },
-                        ticks: { color: '#F8FAFC', font: { weight: 'bold' } }
+                        beginAtZero: true,
+                        ticks: { color: '#94A3B8' },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    x: {
+                        ticks: { color: '#F8FAFC', font: { size: 10 } },
+                        grid: { display: false }
                     }
                 }
             }

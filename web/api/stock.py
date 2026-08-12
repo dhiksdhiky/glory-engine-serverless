@@ -4,6 +4,7 @@ import sys
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from sqlalchemy import text
+import datetime
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from lib.database import SessionLocal
@@ -23,46 +24,36 @@ class handler(BaseHTTPRequestHandler):
             
         db = SessionLocal()
         try:
+            start_date = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
+            
             if action == "harga":
                 sql = text("""
-                    SELECT h.ticker, d.nama_perusahaan, h.close, h.volume,
-                           ROUND(CAST(((h.close - prev.close) / NULLIF(prev.close, 0)) * 100 AS numeric), 2) as chg_pct
-                    FROM harga_saham h
-                    JOIN daftar_saham d ON h.ticker = d.kode
-                    LEFT JOIN (
-                        SELECT ticker, close 
-                        FROM harga_saham 
-                        WHERE tanggal = (SELECT DISTINCT tanggal FROM harga_saham ORDER BY tanggal DESC OFFSET 1 LIMIT 1)
-                    ) prev ON h.ticker = prev.ticker
-                    WHERE h.tanggal = (SELECT MAX(tanggal) FROM harga_saham)
-                    ORDER BY h.volume DESC
-                    LIMIT 50
+                    SELECT tanggal, COUNT(*) as total
+                    FROM harga_saham
+                    WHERE tanggal >= :start_date
+                    GROUP BY tanggal
+                    ORDER BY tanggal ASC
                 """)
-                results = db.execute(sql).fetchall()
+                results = db.execute(sql, {"start_date": start_date}).fetchall()
                 data = [
                     {
-                        "kode": r.ticker,
-                        "nama": r.nama_perusahaan,
-                        "harga": float(r.close) if r.close else 0,
-                        "volume": int(r.volume) if r.volume else 0,
-                        "chg_pct": float(r.chg_pct) if r.chg_pct else 0
+                        "date": r.tanggal,
+                        "total": int(r.total)
                     } for r in results
                 ]
             elif action == "broker":
                 sql = text("""
-                    SELECT broker_code, SUM(net_vol) as total_net_vol, SUM(net_val) as total_net_val
+                    SELECT date, COUNT(DISTINCT ticker) as total
                     FROM broker_summary
-                    WHERE date = (SELECT MAX(date) FROM broker_summary)
-                    GROUP BY broker_code
-                    ORDER BY ABS(SUM(net_val)) DESC
-                    LIMIT 20
+                    WHERE date >= :start_date
+                    GROUP BY date
+                    ORDER BY date ASC
                 """)
-                results = db.execute(sql).fetchall()
+                results = db.execute(sql, {"start_date": start_date}).fetchall()
                 data = [
                     {
-                        "broker": r.broker_code,
-                        "net_vol": int(r.total_net_vol) if r.total_net_vol else 0,
-                        "net_val": float(r.total_net_val) if r.total_net_val else 0
+                        "date": r.date,
+                        "total": int(r.total)
                     } for r in results
                 ]
             else:
