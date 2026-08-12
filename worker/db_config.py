@@ -40,11 +40,11 @@ else:
     if not DATABASE_URL:
         raise ValueError("❌ DATABASE_URL tidak ditemukan di .env! Set TEST_MODE=true untuk SQLite.")
     
-    # Fix for SQLAlchemy 2.0 + Psycopg 3
+    # Fix for SQLAlchemy 2.0 + Psycopg2
     if DATABASE_URL.startswith("postgres://"):
-        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
     elif DATABASE_URL.startswith("postgresql://"):
-        DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+        DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
     # Inisialisasi Engine dengan Retry (Exponential Backoff)
     temp_engine = create_engine(
