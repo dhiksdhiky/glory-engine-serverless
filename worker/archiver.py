@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 import io
 
 DB_URL = os.environ.get("DATABASE_URL")
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") # Chat/Channel ID untuk arsip
+TELEGRAM_BOT_TOKEN = os.environ.get("TELE_BOT_DHIKSDHIKY")
+TELEGRAM_CHAT_ID = os.environ.get("TELE_CHAT_ID_DHIKA") # Chat/Channel ID untuk arsip
 
 def send_document_to_telegram(filename, file_content):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -37,11 +37,11 @@ def archive_and_delete_old_data():
     # Batas data yang disimpan di database adalah 30 hari terakhir
     cutoff_date = datetime.now().date() - timedelta(days=30)
     
-    tables = ["stocks_daily", "broker_summary"]
+    tables = [("harga_saham", "tanggal"), ("broker_summary", "date")]
     
-    for table in tables:
+    for table, date_col in tables:
         # 1. Ekstrak data lama
-        query = f"SELECT * FROM {table} WHERE date < %s"
+        query = f"SELECT * FROM {table} WHERE {date_col} < %s"
         df = pd.read_sql_query(query, conn, params=(cutoff_date,))
         
         if len(df) > 0:
@@ -57,7 +57,7 @@ def archive_and_delete_old_data():
             
             # 4. Hapus dari PostgreSQL JIKA berhasil dikirim (aman)
             if success:
-                delete_query = f"DELETE FROM {table} WHERE date < %s"
+                delete_query = f"DELETE FROM {table} WHERE {date_col} < %s"
                 cur.execute(delete_query, (cutoff_date,))
                 conn.commit()
                 print(f"Deleted {len(df)} rows from {table} (Date < {cutoff_date})")
