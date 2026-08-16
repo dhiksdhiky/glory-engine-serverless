@@ -2,8 +2,8 @@ name: Glory Engine Harvester
 
 on:
   schedule:
-    # Berjalan tiap jam 10:00 UTC (17:00 WIB), dari Senin sampai Jumat
-    - cron: '0 10 * * 1-5'
+    # Berjalan tiap jam 11:00 UTC (18:00 WIB), dari Senin sampai Jumat
+    - cron: '0 11 * * 1-5'
   workflow_dispatch: # Mengizinkan eksekusi manual via tab Actions
 
 jobs:
