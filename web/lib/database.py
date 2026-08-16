@@ -10,7 +10,11 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 if DATABASE_URL:
-    engine = create_engine(DATABASE_URL)
+    engine = create_engine(
+        DATABASE_URL, 
+        pool_pre_ping=True,  # Memeriksa koneksi sebelum digunakan
+        pool_recycle=300     # Merecycle koneksi setiap 5 menit agar tidak stale di serverless
+    )
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 else:
     engine = None
