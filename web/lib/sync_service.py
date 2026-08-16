@@ -49,7 +49,7 @@ def extract_date_from_filename(filename: str) -> date:
 def process_saham_excel(db: Session, excel_bytes: bytes, filename: str) -> dict:
     """Eksekusi strategi Wipe & Replace secara atomik."""
     try:
-        df = pd.read_excel(io.BytesIO(excel_bytes))
+        df = pd.read_excel(io.BytesIO(excel_bytes), engine='openpyxl')
         
         required_columns = ['No', 'Kode', 'Nama Perusahaan', 'Tanggal Pencatatan', 'Saham', 'Papan Pencatatan']
         if not all(col in df.columns for col in required_columns):
