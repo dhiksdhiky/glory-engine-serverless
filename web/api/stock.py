@@ -29,6 +29,15 @@ class handler(BaseHTTPRequestHandler):
 
             # 2 & 3. Data Pipeline & History Harian (7 Hari Terakhir)
             # Kombinasi Harga (OHLCV) dan Broker dalam 1 query efisien.
+            import datetime as dt
+            today = dt.date.today()
+            first_day = today.replace(day=1)
+            # Menentukan tanggal 1 bulan depannya
+            if today.month == 12:
+                next_month_first_day = today.replace(year=today.year+1, month=1, day=1)
+            else:
+                next_month_first_day = today.replace(month=today.month+1, day=1)
+
             sql_history = text("""
                 SELECT 
                     h.tanggal as date,
@@ -36,11 +45,11 @@ class handler(BaseHTTPRequestHandler):
                     SUM(CASE WHEN h.volume > 0 THEN 1 ELSE 0 END) as target_harvester,
                     (SELECT COUNT(DISTINCT b.ticker) FROM broker_summary b WHERE b.date = h.tanggal) as broker_total
                 FROM harga_saham h
+                WHERE h.tanggal >= :first_day AND h.tanggal < :next_month_first_day
                 GROUP BY h.tanggal
-                ORDER BY h.tanggal DESC
-                LIMIT 7
+                ORDER BY h.tanggal ASC
             """)
-            hist_rows = db.execute(sql_history).fetchall()
+            hist_rows = db.execute(sql_history, {"first_day": first_day, "next_month_first_day": next_month_first_day}).fetchall()
             
             history_data = []
             for r in hist_rows:
@@ -52,7 +61,7 @@ class handler(BaseHTTPRequestHandler):
                 })
 
             if history_data:
-                pipeline_data = history_data[0] # Hari terakhir (paling atas)
+                pipeline_data = history_data[-1] # Hari terakhir (paling bawah/terbaru)
             else:
                 pipeline_data = {
                     "date": "N/A", "ohlcv_scraped": 0, 

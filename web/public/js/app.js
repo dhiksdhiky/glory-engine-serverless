@@ -95,30 +95,8 @@ function renderDashboard() {
     const broksumIcon = broksumPct >= 99 ? "✓" : "3";
     const ohlcvIcon = ohlcvPct >= 95 ? "✓" : "1";
 
-    // 7-Day History UI Generation
-    let historyHtml = '<div class="history-list">';
-    if (data.history && data.history.length > 0) {
-        data.history.forEach(h => {
-            const hOhlcvPct = master.total > 0 ? Math.round((h.ohlcv_scraped / master.total) * 100) : 0;
-            const hBroksumPct = h.target_harvester > 0 ? Math.round((h.broksum_synced / h.target_harvester) * 100) : 0;
-            
-            const ohlcvColor = hOhlcvPct >= 95 ? "green" : (hOhlcvPct >= 50 ? "yellow" : "red");
-            const broksumColor = hBroksumPct >= 99 ? "green" : (hBroksumPct >= 50 ? "yellow" : "red");
-            
-            // Border list mengindikasikan status broksum (karena broksum paling critical)
-            historyHtml += `
-            <div class="history-item border-${broksumColor}">
-                <span class="date">${h.date}</span>
-                <div class="metrics">
-                    <span><span class="dot ${ohlcvColor}"></span> OHLC: ${h.ohlcv_scraped}</span>
-                    <span><span class="dot ${broksumColor}"></span> BSum: ${h.broksum_synced}</span>
-                </div>
-            </div>`;
-        });
-    } else {
-        historyHtml += `<div class="text-muted" style="text-align: center; padding: 10px;">Belum ada history</div>`;
-    }
-    historyHtml += '</div>';
+    // Calendar UI Generation
+    let historyHtml = generateCalendarHtml(data.history);
 
     let errorsHtml = '';
     if(data.errors.length === 0) {
@@ -192,15 +170,20 @@ function renderDashboard() {
                 </div>
             </div>
 
-            <!-- 7-Day History Card -->
+            <!-- Month Calendar Heatmap Card -->
             <div class="glass-card" style="grid-column: 1 / -1;">
-                <div class="card-header">
+                <div class="card-header" style="margin-bottom: 15px;">
                     <div class="card-title">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                        7-Day Sync History
+                        <span id="calendar-month-title">Calendar Sync History</span>
                     </div>
                 </div>
-                ${historyHtml}
+                <div class="calendar-header">
+                    <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+                </div>
+                <div id="calendar-grid" class="calendar-grid">
+                    ${historyHtml}
+                </div>
             </div>
 
             <!-- System Logs -->
@@ -309,6 +292,74 @@ function renderUploadForm() {
 
 function showError(msg) {
     appContent.innerHTML = `<div class="glass-card" style="border-left: 4px solid var(--accent-rose)"><h3 class="text-red">System Error</h3><p>${msg}</p></div>`;
+}
+
+function generateCalendarHtml(historyData) {
+    let html = '';
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0-11
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    
+    // Update judul bulan di next render tick
+    setTimeout(() => {
+        const titleEl = document.getElementById('calendar-month-title');
+        if(titleEl) titleEl.innerText = `${monthNames[currentMonth]} ${currentYear} Sync`;
+    }, 10);
+
+    const historyMap = {};
+    if (historyData) {
+        historyData.forEach(item => {
+            historyMap[item.date] = item;
+        });
+    }
+
+    const firstDayDate = new Date(currentYear, currentMonth, 1);
+    let firstDayIndex = firstDayDate.getDay() - 1;
+    if (firstDayIndex === -1) firstDayIndex = 6;
+    
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+    for (let i = 0; i < firstDayIndex; i++) {
+        html += `<div class="cal-box cal-box-empty"></div>`;
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const monthStr = String(currentMonth + 1).padStart(2, '0');
+        const dayStr = String(day).padStart(2, '0');
+        const dateStr = `${currentYear}-${monthStr}-${dayStr}`;
+
+        const hist = historyMap[dateStr];
+        let boxClass = 'cal-box-empty';
+        let contentHtml = `<div class="cal-stats" style="margin-top: 10px;">-</div>`;
+
+        if (hist) {
+            // Status determination
+            if (hist.broksum_synced >= hist.target_harvester && hist.broksum_synced > 0) {
+                boxClass = 'cal-box-green';
+            } else if (hist.ohlcv_scraped > 0) {
+                boxClass = 'cal-box-red';
+            }
+
+            contentHtml = `
+                <div class="cal-stats">
+                    <span>Harga: <strong>${hist.ohlcv_scraped}</strong></span>
+                    <span>Broksum: <strong>${hist.broksum_synced}</strong></span>
+                </div>
+            `;
+        }
+
+        // Highlight today
+        const isToday = (day === today.getDate()) ? 'border: 1px solid var(--accent-emerald);' : '';
+
+        html += `
+            <div class="cal-box ${boxClass}" style="${isToday}">
+                <div class="cal-date">${day}</div>
+                ${contentHtml}
+            </div>
+        `;
+    }
+    return html;
 }
 
 // Start
