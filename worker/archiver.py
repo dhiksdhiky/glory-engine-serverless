@@ -2,72 +2,97 @@ import os
 import psycopg2
 import pandas as pd
 import requests
-from datetime import datetime, timedelta
 import io
+import logging
+from datetime import datetime
+
+logger = logging.getLogger("Archiver")
 
 DB_URL = os.environ.get("DATABASE_URL")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELE_BOT_DHIKSDHIKY")
-TELEGRAM_CHAT_ID = os.environ.get("TELE_CHAT_ID_DHIKA") # Chat/Channel ID untuk arsip
-
-def send_document_to_telegram(filename, file_content):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Telegram Token/Chat ID not found.")
-        return False
-        
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-    files = {'document': (filename, file_content)}
-    data = {'chat_id': TELEGRAM_CHAT_ID, 'caption': f"Archive: {filename}"}
-    
-    response = requests.post(url, files=files, data=data)
-    if response.status_code == 200:
-        print(f"Successfully archived {filename} to Telegram.")
-        return True
-    else:
-        print(f"Failed to archive: {response.text}")
-        return False
+TELEGRAM_CHAT_ID = os.environ.get("TELE_CHAT_ID_DHIKA")
 
 def archive_and_delete_old_data():
-    if not DB_URL:
-        print("DATABASE_URL not set.")
-        return
+    """
+    Arsipkan data (harga_saham, broker_summary) bulan lalu ke Telegram dalam format .xlsx.
+    """
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        logger.info("📦 Archiver: Telegram credentials tidak ada, skip.")
+        return False
         
+    if not DB_URL:
+        logger.error("❌ Archiver: DATABASE_URL not set.")
+        return False
+
+    logger.info("📦 Memulai Smart Archiver Bulanan...")
     conn = psycopg2.connect(DB_URL)
     cur = conn.cursor()
     
-    # Batas data yang disimpan di database adalah 30 hari terakhir
-    cutoff_date = datetime.now().date() - timedelta(days=30)
+    # Batas data: Ambil semua data sebelum tanggal 1 bulan ini
+    today = datetime.now().date()
+    cutoff_date = today.replace(day=1)
     
     tables = [("harga_saham", "tanggal"), ("broker_summary", "date")]
     
     for table, date_col in tables:
-        # 1. Ekstrak data lama
         query = f"SELECT * FROM {table} WHERE {date_col} < %s"
         df = pd.read_sql_query(query, conn, params=(cutoff_date,))
         
         if len(df) > 0:
-            # 2. Convert ke CSV in-memory
-            csv_buffer = io.BytesIO()
-            df.to_csv(csv_buffer, index=False)
-            csv_buffer.seek(0)
+            total_rows = len(df)
+            min_date = df[date_col].min()
+            max_date = df[date_col].max()
             
-            filename = f"{table}_archive_until_{cutoff_date}.csv"
+            if isinstance(min_date, str):
+                min_date_str = min_date.replace('-', '')
+                max_date_str = max_date.replace('-', '')
+            else:
+                min_date_str = min_date.strftime('%Y%m%d')
+                max_date_str = max_date.strftime('%Y%m%d')
+
+            # Export ke Excel in-memory
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name=f'Archived_{table}')
+            buffer.seek(0)
             
-            # 3. Kirim ke Telegram
-            success = send_document_to_telegram(filename, csv_buffer)
+            filename = f"Archive_{table}_{min_date_str}_to_{max_date_str}.xlsx"
             
-            # 4. Hapus dari PostgreSQL JIKA berhasil dikirim (aman)
-            if success:
+            # Kirim ke Telegram
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+            payload = {
+                "chat_id": TELEGRAM_CHAT_ID,
+                "caption": (
+                    f"🗄️ *Glory Auto-Archiver*\n"
+                    f"Tabel: `{table}`\n"
+                    f"Total: `{total_rows}` baris\n"
+                    f"Rentang: `{min_date_str}` - `{max_date_str}`\n"
+                    f"Mode: Smart Month End"
+                ),
+                "parse_mode": "Markdown"
+            }
+            files = {"document": (filename, buffer,
+                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+            
+            response = requests.post(url, data=payload, files=files, timeout=60)
+            
+            if response.status_code == 200:
+                logger.info(f"✅ Successfully archived {filename} to Telegram.")
                 delete_query = f"DELETE FROM {table} WHERE {date_col} < %s"
                 cur.execute(delete_query, (cutoff_date,))
                 conn.commit()
-                print(f"Deleted {len(df)} rows from {table} (Date < {cutoff_date})")
+                logger.info(f"🗑️ Deleted {total_rows} rows from {table} (Date < {cutoff_date})")
+            else:
+                logger.error(f"❌ Failed to archive: HTTP {response.status_code} - {response.text}")
         else:
-            print(f"No old data to archive for {table}.")
+            logger.info(f"✅ Tidak ada data usang untuk {table} sebelum {cutoff_date}.")
             
     cur.close()
     conn.close()
+    return True
 
 if __name__ == "__main__":
-    print("Starting Archiver Process...")
+    logging.basicConfig(level=logging.INFO)
+    logger.info("Starting Standalone Archiver Process...")
     archive_and_delete_old_data()
-    print("Archiver Process Finished.")
+    logger.info("Archiver Process Finished.")

@@ -29,6 +29,7 @@ from db_config import (
     get_date_cutoff_sql, TEST_MODE
 )
 from scraper import BroksumScraper, SoftBlockError
+from archiver import archive_and_delete_old_data
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -98,78 +99,7 @@ class BatchHarvester:
             logger.warning(f"⚠️ Gagal {ticker} [{target_date}]: {str(e)[:100]}")
             return 'error'
 
-    def run_archiver(self):
-        """
-        Arsipkan data BrokSum > 2 tahun ke Telegram (setiap tanggal 1).
-        Skip jika Telegram credentials tidak ada.
-        """
-        if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-            logger.info("📦 Archiver: Telegram credentials tidak ada, skip.")
-            return
 
-        now = datetime.now()
-        if now.day != 1:
-            logger.info(f"📅 Archiver standby (hari ini tgl {now.day}, dijadwalkan tgl 1).")
-            return
-
-        logger.info("📦 Memulai Archiver Bulanan (data > 30 hari)...")
-        cutoff_sql = get_date_cutoff_sql("date", 30)
-
-        try:
-            with engine.connect() as conn:
-                df = pd.read_sql(f"SELECT * FROM broker_summary WHERE {cutoff_sql}", conn)
-
-            if df.empty:
-                logger.info("✅ Tidak ada data usang untuk diarsipkan.")
-                return
-
-            total_rows = len(df)
-            min_date = df['date'].min()
-            max_date = df['date'].max()
-
-            # Format date jika perlu (SQLite returns string)
-            if isinstance(min_date, str):
-                min_date_str = min_date.replace('-', '')
-                max_date_str = max_date.replace('-', '')
-            else:
-                min_date_str = min_date.strftime('%Y%m%d')
-                max_date_str = max_date.strftime('%Y%m%d')
-
-            filename = f"Archive_BrokSum_{min_date_str}_to_{max_date_str}.xlsx"
-
-            # Export ke Excel in-memory
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='Archived_BrokSum')
-            buffer.seek(0)
-
-            # Kirim ke Telegram
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-            payload = {
-                "chat_id": TELEGRAM_CHAT_ID,
-                "caption": (
-                    f"🗄️ *Glory Auto-Archiver*\n"
-                    f"Data BrokSum usang (> 30 Hari).\n"
-                    f"Total: `{total_rows}` baris\n"
-                    f"Rentang: `{min_date_str}` - `{max_date_str}`"
-                ),
-                "parse_mode": "Markdown"
-            }
-            files = {"document": (filename, buffer,
-                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
-
-            response = requests.post(url, data=payload, files=files, timeout=60)
-            if response.status_code == 200:
-                with SessionLocal() as db:
-                    db.execute(text(f"DELETE FROM broker_summary WHERE {cutoff_sql}"))
-                    db.commit()
-                logger.info(f"🗑️ {total_rows} baris data usang dihapus setelah arsip.")
-            else:
-                log_to_db("harvester_archiver", "ERROR",
-                          f"Telegram HTTP {response.status_code}")
-
-        except Exception as e:
-            log_to_db("harvester_archiver", "ERROR", "Archiver gagal", exc_info=e)
 
     def run_batch(self) -> bool:
         """
@@ -180,7 +110,7 @@ class BatchHarvester:
         logger.info("  🕷️ HARVESTER BATCH DIMULAI")
         logger.info("═══════════════════════════════════════════")
 
-        self.run_archiver()
+        archive_and_delete_old_data()
 
         targets = self.get_pending_targets()
         total_targets = len(targets)
