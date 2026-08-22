@@ -10,11 +10,42 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 if DATABASE_URL:
-    engine = create_engine(
+    import time
+    import random
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy import text
+    
+    # Inisialisasi engine utama
+    temp_engine = create_engine(
         DATABASE_URL, 
-        pool_pre_ping=True,  # Memeriksa koneksi sebelum digunakan
-        pool_recycle=300     # Merecycle koneksi setiap 5 menit agar tidak stale di serverless
+        pool_pre_ping=True,
+        pool_recycle=300,
+        connect_args={"connect_timeout": 10} # Timeout per percobaan
     )
+
+    max_retries = 4
+    initial_delay = 1
+    engine = None
+
+    for attempt in range(max_retries):
+        try:
+            with temp_engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            engine = temp_engine
+            break # Berhasil connect
+        except OperationalError:
+            if attempt == max_retries - 1:
+                # Gagal setelah semua percobaan
+                pass
+            else:
+                # Exponential backoff: 1s, 2s, 4s (total max 7s + jitter)
+                wait_time = (initial_delay * (2 ** attempt)) + random.uniform(0, 0.5)
+                time.sleep(wait_time)
+                
+    if engine is None:
+        # Fallback jika gagal setelah retries
+        engine = temp_engine 
+        
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 else:
     engine = None
