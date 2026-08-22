@@ -1,10 +1,10 @@
 import os
-import psycopg2
 import pandas as pd
 import requests
 import io
 import logging
 from datetime import datetime
+from sqlalchemy import create_engine, text
 
 logger = logging.getLogger("Archiver")
 
@@ -25,8 +25,7 @@ def archive_and_delete_old_data():
         return False
 
     logger.info("📦 Memulai Smart Archiver Bulanan...")
-    conn = psycopg2.connect(DB_URL)
-    cur = conn.cursor()
+    engine = create_engine(DB_URL)
     
     # Batas data: Ambil semua data sebelum tanggal 1 bulan ini
     today = datetime.now().date()
@@ -34,61 +33,61 @@ def archive_and_delete_old_data():
     
     tables = [("harga_saham", "tanggal"), ("broker_summary", "date")]
     
-    for table, date_col in tables:
-        query = f"SELECT * FROM {table} WHERE {date_col} < %s"
-        df = pd.read_sql_query(query, conn, params=(cutoff_date,))
-        
-        if len(df) > 0:
-            total_rows = len(df)
-            min_date = df[date_col].min()
-            max_date = df[date_col].max()
+    with engine.connect() as conn:
+        for table, date_col in tables:
+            query = f"SELECT * FROM {table} WHERE {date_col} < '{cutoff_date}'"
+            df = pd.read_sql_query(query, conn)
             
-            if isinstance(min_date, str):
-                min_date_str = min_date.replace('-', '')
-                max_date_str = max_date.replace('-', '')
-            else:
-                min_date_str = min_date.strftime('%Y%m%d')
-                max_date_str = max_date.strftime('%Y%m%d')
+            if len(df) > 0:
+                total_rows = len(df)
+                min_date = df[date_col].min()
+                max_date = df[date_col].max()
+                
+                if isinstance(min_date, str):
+                    min_date_str = min_date.replace('-', '')
+                    max_date_str = max_date.replace('-', '')
+                else:
+                    min_date_str = min_date.strftime('%Y%m%d')
+                    max_date_str = max_date.strftime('%Y%m%d')
 
-            # Export ke Excel in-memory
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name=f'Archived_{table}')
-            buffer.seek(0)
-            
-            filename = f"Archive_{table}_{min_date_str}_to_{max_date_str}.xlsx"
-            
-            # Kirim ke Telegram
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-            payload = {
-                "chat_id": TELEGRAM_CHAT_ID,
-                "caption": (
-                    f"🗄️ *Glory Auto-Archiver*\n"
-                    f"Tabel: `{table}`\n"
-                    f"Total: `{total_rows}` baris\n"
-                    f"Rentang: `{min_date_str}` - `{max_date_str}`\n"
-                    f"Mode: Smart Month End"
-                ),
-                "parse_mode": "Markdown"
-            }
-            files = {"document": (filename, buffer,
-                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
-            
-            response = requests.post(url, data=payload, files=files, timeout=60)
-            
-            if response.status_code == 200:
-                logger.info(f"✅ Successfully archived {filename} to Telegram.")
-                delete_query = f"DELETE FROM {table} WHERE {date_col} < %s"
-                cur.execute(delete_query, (cutoff_date,))
-                conn.commit()
-                logger.info(f"🗑️ Deleted {total_rows} rows from {table} (Date < {cutoff_date})")
+                # Export ke Excel in-memory
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name=f'Archived_{table}')
+                buffer.seek(0)
+                
+                filename = f"Archive_{table}_{min_date_str}_to_{max_date_str}.xlsx"
+                
+                # Kirim ke Telegram
+                url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+                payload = {
+                    "chat_id": TELEGRAM_CHAT_ID,
+                    "caption": (
+                        f"🗄️ *Glory Auto-Archiver*\n"
+                        f"Tabel: `{table}`\n"
+                        f"Total: `{total_rows}` baris\n"
+                        f"Rentang: `{min_date_str}` - `{max_date_str}`\n"
+                        f"Mode: Smart Month End"
+                    ),
+                    "parse_mode": "Markdown"
+                }
+                files = {"document": (filename, buffer,
+                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+                
+                response = requests.post(url, data=payload, files=files, timeout=60)
+                
+                if response.status_code == 200:
+                    logger.info(f"✅ Successfully archived {filename} to Telegram.")
+                    with conn.begin():
+                        delete_query = text(f"DELETE FROM {table} WHERE {date_col} < :cutoff_date")
+                        conn.execute(delete_query, {"cutoff_date": cutoff_date})
+                    logger.info(f"🗑️ Deleted {total_rows} rows from {table} (Date < {cutoff_date})")
+                else:
+                    logger.error(f"❌ Failed to archive: HTTP {response.status_code} - {response.text}")
             else:
-                logger.error(f"❌ Failed to archive: HTTP {response.status_code} - {response.text}")
-        else:
-            logger.info(f"✅ Tidak ada data usang untuk {table} sebelum {cutoff_date}.")
-            
-    cur.close()
-    conn.close()
+                logger.info(f"✅ Tidak ada data usang untuk {table} sebelum {cutoff_date}.")
+
+    engine.dispose()
     return True
 
 if __name__ == "__main__":
