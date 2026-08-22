@@ -1,50 +1,25 @@
-# 🚀 Glory Engine Serverless (Stock Engine V2)
+# 🚀 Glory Engine Serverless
 
-Arsitektur "Opsi B" yang 100% didesain untuk kebal dari limitasi **Free Tier** dengan memisahkan *Worker* (Pumping/Scraping Data) dan *Frontend/API* (Commlink Telegram & PWA).
+**Glory Engine Serverless** adalah mesin otomatis pengumpul data pasar saham Indonesia (OHLCV & Broker Summary) yang dirancang dengan arsitektur 100% *Serverless* untuk beroperasi secara mandiri dan bebas biaya infrastruktur (*Zero-Cost*).
 
-## 🏗 Arsitektur Monorepo
+## 🏗️ Arsitektur Sistem
 
-Project ini menggunakan arsitektur Monorepo yang memisahkan eksekusi antara Vercel dan Railway.
+Proyek ini memisahkan beban kerja menjadi dua entitas utama (Monorepo):
 
-### 1. 🚄 `worker/` (Railway - Worker & Database)
-Folder ini di-_deploy_ di **Railway** menggunakan fitur **Cron Job**. 
-Tugasnya adalah memompa data secara periodik dan langsung mati (*graceful exit*) saat selesai agar tidak menyedot kuota bulanan Free Tier (500 jam).
-- **`pipeline.py`**: Mengunduh dan membersihkan data OHLCV via *yfinance*.
-- **`harvester.py` & `scraper.py`**: Menjalankan *IPOT Web Scraper* untuk data *Broker Summary* (Dilengkapi dengan WAF *Circuit Breaker*).
-- **`archiver.py`**: Fitur otomatis pembersihan data PostgreSQL lebih dari 30 hari.
+### 1. `worker/` (Data Harvester & Archiver)
+Berjalan secara otomatis via **GitHub Actions** setiap penutupan bursa. Bertugas:
+- **Pipeline**: Memompa data *OHLCV* (Open, High, Low, Close, Volume) harian.
+- **Harvester**: Menjalankan *Web Scraper* untuk data akumulasi/distribusi *Broker Summary*.
+- **Smart Archiver**: Membersihkan dan mengarsipkan data bulan lalu ke Telegram secara pintar, menjaga database tetap ringan.
 
-### 2. 🚀 `web/` (Vercel - Serverless Webhook & PWA)
-Folder ini di-_deploy_ di **Vercel** sebagai fungsi Serverless (Maks 10 detik per request, kebal polling Telegram limit).
-- **`/api/webhook.py`**: Entrypoint Serverless yang bertindak sebagai bot Telegram (*webhook*).
-- **`/api/stock.py`**: Entrypoint untuk Frontend PWA.
-- **`/lib/`**: Kumpulan modul berat (*SQLAlchemy*, query analitik seperti Inflow/Outflow dan HMB) milik Glory Commlink.
-- **`/public/`**: Frontend Progressive Web App (PWA) dengan *Service Worker* & *Manifest*.
+### 2. `web/` (API, PWA, & Telegram Bot)
+Di-_deploy_ menggunakan layanan **Vercel** Serverless. Bertugas:
+- **Webhook API**: Bertindak sebagai otak di balik Bot Telegram pintar pencari saham.
+- **PWA Dashboard**: Antarmuka visual berupa *Heatmap Calendar* untuk memantau kelancaran sinkronisasi data harian secara langsung.
 
----
+## 💾 Basis Data (Database)
 
-## ⚙️ Panduan Deployment
-
-### Variabel Environment (.env)
-Baik Vercel maupun Railway membutuhkan 3 Variabel wajib ini:
-- `DATABASE_URL`: URI PostgreSQL dari Railway. (Wajib menggunakan prefix `postgresql://`).
-- `TELE_BOT_DHIKSDHIKY`: Token Bot Telegram dari BotFather.
-- `TELE_CHAT_ID_DHIKA`: Chat ID Anda untuk filter autorisasi perintah.
-
-### Deploy Worker (Railway)
-1. Hubungkan repo ke Railway, buat *New Project*.
-2. Setup *PostgreSQL*.
-3. Edit **Root Directory** dari repo ini menjadi `/worker`.
-4. Di bagian **Settings > Cron**, jadwalkan kapan worker berjalan (Misal: `0 16 * * 1-5` untuk hari kerja jam 4 sore).
-5. Masukkan variabel environment.
-
-### Deploy Webhook & PWA (Vercel)
-1. Hubungkan repo ke Vercel.
-2. Edit **Root Directory** menjadi `web`.
-3. Masukkan variabel environment.
-4. Klik **Deploy**.
-5. Setelah Vercel memberikan domain (contoh: `https://glory-engine.vercel.app`), aktifkan Webhook Telegram dengan URL berikut di *Browser*:
-   `https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://glory-engine.vercel.app/api/webhook`
+Sistem menggunakan **PostgreSQL** terpusat (saat ini diletakkan di **Railway**) yang dirancang untuk sangat ramping. Berkat rutinitas pengarsipan bulanan, beban penyimpanan ditekan seminimal mungkin (hanya menampung *active month*), memastikan penggunaan *resources* aman dan tak pernah melewati batas *Free Tier*.
 
 ---
-
-*Dibuat khusus untuk arsitektur serverless Opsi B persahaman duniawi. 🇮🇩*
+*Dibuat khusus untuk arsitektur serverless analitik saham. 🇮🇩*
