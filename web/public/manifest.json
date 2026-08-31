@@ -1,6 +1,6 @@
 {
-  "name": "Stock Engine Tracker",
-  "short_name": "Stock PWA",
+  "name": "Glory Engine Serverless",
+  "short_name": "Glory Engine",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#1a1a1a",

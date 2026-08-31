@@ -1,10 +1,11 @@
-const CACHE_NAME = 'stock-pwa-v1';
+const CACHE_NAME = 'stock-pwa-v2';
 
 const urlsToCache = [
   './',
   './index.html',
   './css/style.css',
-  './js/app.js'
+  './js/app.js',
+  './icons/icon-192.png'
 ];
 
 self.addEventListener('install', event => {
