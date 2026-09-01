@@ -78,9 +78,9 @@ def archive_and_delete_old_data():
                 
                 if response.status_code == 200:
                     logger.info(f"✅ Successfully archived {filename} to Telegram.")
-                    with conn.begin():
-                        delete_query = text(f"DELETE FROM {table} WHERE {date_col} < :cutoff_date")
-                        conn.execute(delete_query, {"cutoff_date": cutoff_date})
+                    delete_query = text(f"DELETE FROM {table} WHERE {date_col} < :cutoff_date")
+                    conn.execute(delete_query, {"cutoff_date": cutoff_date})
+                    conn.commit()
                     logger.info(f"🗑️ Deleted {total_rows} rows from {table} (Date < {cutoff_date})")
                 else:
                     logger.error(f"❌ Failed to archive: HTTP {response.status_code} - {response.text}")
