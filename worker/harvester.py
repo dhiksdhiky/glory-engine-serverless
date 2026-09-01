@@ -66,7 +66,7 @@ class BatchHarvester:
                 SELECT 1 FROM broker_summary b
                 WHERE b.ticker = h.ticker AND b.date = h.tanggal
             )
-            ORDER BY h.tanggal DESC
+            ORDER BY h.tanggal ASC
             LIMIT :limit
         """)
         try:

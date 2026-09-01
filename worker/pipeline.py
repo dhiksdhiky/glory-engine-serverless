@@ -105,9 +105,9 @@ def get_master_calendar(start_date: date, end_date: date) -> pd.DatetimeIndex:
 
 
 def cleanup_old_data():
-    """Hapus data harga >30 hari untuk menghemat storage."""
+    """Hapus data harga >60 hari untuk menghemat storage (memberi ruang bagi archiver)."""
     try:
-        cutoff_sql = get_date_cutoff_sql("tanggal", 30)
+        cutoff_sql = get_date_cutoff_sql("tanggal", 60)
         with engine.connect() as conn:
             with conn.begin():
                 result = conn.execute(text(f"DELETE FROM harga_saham WHERE {cutoff_sql}"))
@@ -151,7 +151,9 @@ def run_pipeline():
     # ── Setup waktu ─────────────────────────────────────────
     now_jkt = datetime.now(JKT_TZ)
     api_end_date = now_jkt.date() + timedelta(days=1)
-    min_date = now_jkt.date() - timedelta(days=30)  # Ambil maksimal 30 hari ke belakang agar pergantian bulan tidak terpotong
+    
+    # Batas pengaman jika DB benar-benar kosong
+    min_date = now_jkt.date() - timedelta(days=LOOKBACK_DAYS)
 
     try:
         master_calendar = get_master_calendar(min_date, api_end_date)
@@ -169,15 +171,16 @@ def run_pipeline():
         ticker_yf = f"{ticker_code}.JK"
         try:
             last_date = last_update_dates.get(ticker_code)
-
-            # Jika sudah ada data, ambil dari 5 hari sebelum data terakhir
+            
+            start_dt = min_date
             if last_date:
-                # Handle string date dari SQLite
                 if isinstance(last_date, str):
                     last_date = datetime.strptime(last_date, "%Y-%m-%d").date()
-                start_dt = max(last_date - timedelta(days=5), min_date)
-            else:
-                start_dt = min_date
+                
+                # Ambil dari 5 hari SEBELUM data terakhir, tanpa dibatasi jendela 30 hari
+                start_dt_calc = last_date - timedelta(days=5)
+                # Batasi agar tidak mendownload 2 tahun saat fresh start
+                start_dt = max(start_dt_calc, min_date)
 
             data_raw = yf.download(
                 ticker_yf, start=start_dt, end=api_end_date,
@@ -201,7 +204,7 @@ def run_pipeline():
             local_calendar = master_calendar[mask]
             data_reindexed = data_raw.reindex(local_calendar)
             data_reindexed[['Open', 'High', 'Low', 'Close']] = \
-                data_reindexed[['Open', 'High', 'Low', 'Close']].ffill()
+                data_reindexed[['Open', 'High', 'Low', 'Close']].ffill(limit=3)
             data_reindexed['Volume'] = data_reindexed['Volume'].fillna(0)
             data_reindexed.dropna(subset=['Close'], inplace=True)
 

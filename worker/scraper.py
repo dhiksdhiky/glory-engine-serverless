@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy import text
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from fake_useragent import UserAgent
+from urllib3.util.retry import Retry
 
 from db_config import engine, SessionLocal, get_dialect, TEST_MODE
 from models import BrokerSummary
@@ -35,7 +35,7 @@ class SoftBlockError(Exception):
 class BroksumScraper:
     def __init__(self):
         self.base_url = "https://www.indopremier.com/module/saham/include/data-brokersummary.php"
-        self.ua = UserAgent(os=['windows', 'macos'], browsers=['chrome', 'edge', 'firefox'])
+        self.ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 
         # Retry strategy: 3x untuk HTTP 429/5xx
         self.session = requests.Session()
@@ -50,15 +50,22 @@ class BroksumScraper:
         self.session.mount("http://", adapter)
 
     def _convert_to_float(self, value_str: str) -> float:
-        """Parse angka dengan suffix K/M/B/T."""
+        """Parse angka dengan suffix K/M/B/T dan hilangkan titik ribuan format ID."""
         if not value_str or value_str.strip() in ('', '-'):
             return 0.0
-        clean = value_str.strip().upper().replace(',', '')
+            
+        clean = value_str.strip().upper()
+        # Jika nilai dari web IndoPremier pakai format Indonesia (contoh "1,5B"), kita ganti koma jadi titik desimal.
+        clean = clean.replace(',', '.')
+        
         try:
             multipliers = {'T': 1e12, 'B': 1e9, 'M': 1e6, 'K': 1e3}
             for suffix, mult in multipliers.items():
                 if suffix in clean:
                     return float(clean.replace(suffix, '')) * mult
+            
+            # Jika tidak ada suffix (contoh "1.000" lot), maka titik adalah pemisah ribuan, bukan desimal.
+            clean = clean.replace('.', '')
             return float(clean)
         except ValueError:
             return 0.0
@@ -119,7 +126,7 @@ class BroksumScraper:
                 'board': 'all'
             }
             headers = {
-                'User-Agent': self.ua.random,
+                'User-Agent': self.ua,
                 'Referer': 'https://www.indopremier.com/',
                 'Accept': '*/*',
                 'X-Requested-With': 'XMLHttpRequest'

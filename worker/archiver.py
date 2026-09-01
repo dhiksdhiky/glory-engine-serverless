@@ -1,10 +1,11 @@
 import os
 import pandas as pd
 import requests
-import io
+import tempfile
 import logging
-from datetime import datetime
 from sqlalchemy import create_engine, text
+
+from db_config import today_jkt
 
 logger = logging.getLogger("Archiver")
 
@@ -28,7 +29,7 @@ def archive_and_delete_old_data():
     engine = create_engine(DB_URL)
     
     # Batas data: Ambil semua data sebelum tanggal 1 bulan ini
-    today = datetime.now().date()
+    today = today_jkt()
     cutoff_date = today.replace(day=1)
     
     tables = [("harga_saham", "tanggal"), ("broker_summary", "date")]
@@ -50,13 +51,20 @@ def archive_and_delete_old_data():
                     min_date_str = min_date.strftime('%Y%m%d')
                     max_date_str = max_date.strftime('%Y%m%d')
 
-                # Export ke Excel in-memory
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                # Export ke Excel via tempfile
+                with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+                    tmp_path = tmp.name
+                    
+                with pd.ExcelWriter(tmp_path, engine='openpyxl') as writer:
                     df.to_excel(writer, index=False, sheet_name=f'Archived_{table}')
-                buffer.seek(0)
                 
+                file_size = os.path.getsize(tmp_path)
                 filename = f"Archive_{table}_{min_date_str}_to_{max_date_str}.xlsx"
+                
+                if file_size > 45 * 1024 * 1024:
+                    logger.error(f"❌ File {filename} ({file_size/1e6:.1f} MB) melampaui batas 50MB Telegram. Skip delete!")
+                    os.unlink(tmp_path)
+                    continue
                 
                 # Kirim ke Telegram
                 url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
@@ -67,14 +75,18 @@ def archive_and_delete_old_data():
                         f"Tabel: `{table}`\n"
                         f"Total: `{total_rows}` baris\n"
                         f"Rentang: `{min_date_str}` - `{max_date_str}`\n"
+                        f"Ukuran: `{file_size/1e6:.1f} MB`\n"
                         f"Mode: Smart Month End"
                     ),
                     "parse_mode": "Markdown"
                 }
-                files = {"document": (filename, buffer,
-                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
                 
-                response = requests.post(url, data=payload, files=files, timeout=60)
+                with open(tmp_path, "rb") as f:
+                    files = {"document": (filename, f,
+                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+                    response = requests.post(url, data=payload, files=files, timeout=300)
+                
+                os.unlink(tmp_path)
                 
                 if response.status_code == 200:
                     logger.info(f"✅ Successfully archived {filename} to Telegram.")

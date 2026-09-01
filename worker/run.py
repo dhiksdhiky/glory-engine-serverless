@@ -61,15 +61,17 @@ def main():
             pipeline_success = False
 
     # ── Step 3: Harvester BrokSum ───────────────────────────
+    harvester_success = True
     if not pipeline_only:
-        if pipeline_success:
-            try:
-                from harvester import run_harvester
-                run_harvester(daemon_mode=daemon_mode)
-            except Exception as e:
-                logger.error(f"❌ Harvester crash: {e}")
-        else:
-            logger.warning("⚠️ Harvester DILEWATI karena Pipeline gagal.")
+        try:
+            from harvester import run_harvester
+            run_harvester(daemon_mode=daemon_mode)
+        except Exception as e:
+            logger.error(f"❌ Harvester crash: {e}")
+            harvester_success = False
+
+    if not pipeline_success:
+        logger.error("⚠️ Peringatan: Pipeline sempat gagal sebelumnya (lihat log di atas).")
 
     # ── Summary ─────────────────────────────────────────────
     duration = datetime.now() - start_time
@@ -77,6 +79,9 @@ def main():
     logger.info("╔═══════════════════════════════════════════╗")
     logger.info(f"║  🏁 SELESAI — Durasi: {str(duration).split('.')[0]:>17s}  ║")
     logger.info("╚═══════════════════════════════════════════╝")
+    
+    if not pipeline_success or (not pipeline_only and not harvester_success):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

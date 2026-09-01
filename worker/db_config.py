@@ -21,6 +21,18 @@ logger = logging.getLogger("DBConfig")
 # ── Mode Detection ──────────────────────────────────────────
 TEST_MODE = os.getenv("TEST_MODE", "false").lower() == "true"
 
+# ── Timezone Helper ─────────────────────────────────────────
+import pytz
+from datetime import datetime, date
+
+JKT_TZ = pytz.timezone("Asia/Jakarta")
+
+def today_jkt() -> date:
+    return datetime.now(JKT_TZ).date()
+
+def now_jkt() -> datetime:
+    return datetime.now(JKT_TZ)
+
 # ── Engine Creation ─────────────────────────────────────────
 if TEST_MODE:
     SQLITE_PATH = os.getenv("SQLITE_PATH", "local_test.db")
@@ -50,8 +62,9 @@ else:
     temp_engine = create_engine(
         DATABASE_URL,
         pool_pre_ping=True,
-        pool_size=5,
-        max_overflow=10,
+        pool_size=2,
+        max_overflow=2,
+        pool_recycle=300,
         connect_args={"connect_timeout": 15}
     )
 
@@ -276,6 +289,16 @@ def setup_tables():
                         error_message VARCHAR(255) NOT NULL,
                         traceback TEXT
                     )
+                """))
+                
+                # Indexes for Performance
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_broker_summary_ticker_date
+                        ON broker_summary (ticker, date)
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_harga_saham_ticker_date
+                        ON harga_saham (ticker, tanggal)
                 """))
 
     logger.info("✅ Semua tabel siap.")
