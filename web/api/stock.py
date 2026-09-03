@@ -87,11 +87,74 @@ class handler(BaseHTTPRequestHandler):
                     "time": time_str
                 })
 
+            # 5. Archive Status & DB Stats
+            try:
+                sql_archive = text("""
+                    SELECT month, status, completed_at 
+                    FROM archive_status 
+                    ORDER BY month DESC 
+                    LIMIT 5
+                """)
+                archive_rows = db.execute(sql_archive).fetchall()
+                archive_list = []
+                for r in archive_rows:
+                    dt_str = r.completed_at.strftime('%Y-%m-%d %H:%M') if hasattr(r.completed_at, 'strftime') and r.completed_at else str(r.completed_at)
+                    archive_list.append({
+                        "month": str(r.month),
+                        "status": str(r.status),
+                        "completed_at": dt_str
+                    })
+
+                sql_stats = text("""
+                    SELECT 
+                        (SELECT COUNT(*) FROM harga_saham) as total_harga,
+                        (SELECT COUNT(*) FROM broker_summary) as total_broksum,
+                        (SELECT MIN(tanggal) FROM harga_saham) as min_date,
+                        (SELECT MAX(tanggal) FROM harga_saham) as max_date
+                """)
+                stats_row = db.execute(sql_stats).fetchone()
+                db_stats = {
+                    "total_harga": int(stats_row.total_harga) if stats_row and stats_row.total_harga else 0,
+                    "total_broksum": int(stats_row.total_broksum) if stats_row and stats_row.total_broksum else 0,
+                    "min_date": str(stats_row.min_date) if stats_row and stats_row.min_date else "N/A",
+                    "max_date": str(stats_row.max_date) if stats_row and stats_row.max_date else "N/A"
+                }
+            except Exception as e:
+                archive_list = []
+                db_stats = {"total_harga": 0, "total_broksum": 0, "min_date": "N/A", "max_date": "N/A"}
+
+            # 6. Harvester Gaps (Suspended / Empty Emiten)
+            try:
+                sql_gaps = text("""
+                    SELECT ticker, date, reason, attempts, last_attempt 
+                    FROM harvester_gaps 
+                    ORDER BY date DESC, attempts DESC 
+                    LIMIT 15
+                """)
+                gap_rows = db.execute(sql_gaps).fetchall()
+                gap_list = []
+                for r in gap_rows:
+                    dt_str = r.last_attempt.strftime('%Y-%m-%d %H:%M') if hasattr(r.last_attempt, 'strftime') and r.last_attempt else str(r.last_attempt)
+                    gap_list.append({
+                        "ticker": str(r.ticker),
+                        "date": str(r.date),
+                        "reason": str(r.reason),
+                        "attempts": int(r.attempts) if r.attempts else 1,
+                        "last_attempt": dt_str
+                    })
+            except Exception as e:
+                gap_list = []
+
             data = {
                 "saham": {"total": saham_total, "last_update": saham_date},
                 "pipeline": pipeline_data,
                 "history": history_data,
-                "errors": errors
+                "errors": errors,
+                "archive": {
+                    "history": archive_list,
+                    "stats": db_stats
+                },
+                "gaps": gap_list
             }
 
             self.send_response(200)

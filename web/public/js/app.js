@@ -57,6 +57,20 @@ async function fetchDashboardData() {
             errors: [
                 { bot_name: "harvester", level: "WARNING", message: "Timeout parsing broker summary BBCA", time: "2026-08-15 14:32" },
                 { bot_name: "harvester", level: "ERROR", message: "Database connection lost (retry 1)", time: "2026-08-14 02:11" }
+            ],
+            archive: {
+                history: [
+                    { month: "2026-07", status: "completed", completed_at: "2026-08-01 23:15" }
+                ],
+                stats: {
+                    total_harga: 1842,
+                    total_broksum: 21125,
+                    min_date: "2026-09-01",
+                    max_date: "2026-09-02"
+                }
+            },
+            gaps: [
+                { ticker: "POOL", date: "2026-08-31", reason: "soft_block", attempts: 3, last_attempt: "2026-09-02 18:30" }
             ]
         };
         renderView();
@@ -98,8 +112,59 @@ function renderDashboard() {
     // Calendar UI Generation
     let historyHtml = generateCalendarHtml(data.history);
 
+    // Archive Health & Stats (Ide A)
+    const archiveInfo = data.archive || { history: [], stats: { total_harga: 0, total_broksum: 0, min_date: 'N/A', max_date: 'N/A' } };
+    let archiveHistoryHtml = '';
+    if (archiveInfo.history && archiveInfo.history.length > 0) {
+        archiveInfo.history.forEach(item => {
+            const isForce = item.status === 'completed_force';
+            const badgeText = isForce ? 'Force-Closed' : 'Completed';
+            archiveHistoryHtml += `
+                <div class="archive-item">
+                    <div>
+                        <strong style="color: var(--text-main); font-size: 0.85rem;">Bulan ${item.month}</strong>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">${item.completed_at || '-'}</div>
+                    </div>
+                    <span class="archive-badge">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        ${badgeText}
+                    </span>
+                </div>
+            `;
+        });
+    } else {
+        archiveHistoryHtml = `
+            <div style="font-size: 0.8rem; color: var(--text-muted); padding: 4px 0;">
+                ⏳ Belum ada bulan lampau yang ditutup (Siklus Agustus otomatis tercatat begitu tuntas).
+            </div>
+        `;
+    }
+
+    // Gaps / Suspended Stocks (Ide B)
+    const gapsList = data.gaps || [];
+    let gapsHtml = '';
+    if (gapsList.length === 0) {
+        gapsHtml = `
+            <div style="text-align: center; color: var(--accent-emerald); padding: 0.75rem 0; font-size: 0.85rem;">
+                Normal 🟢 (0 saham suspensi / gap anomali tercatat)
+            </div>
+        `;
+    } else {
+        gapsList.forEach(g => {
+            gapsHtml += `
+                <div class="gap-item">
+                    <div class="gap-meta">
+                        <span class="gap-ticker">${g.ticker}</span>
+                        <span class="gap-date">Tanggal: ${g.date} • ${g.attempts}x dicoba (${g.last_attempt})</span>
+                    </div>
+                    <span class="gap-badge">${g.reason || 'Data Kosong'}</span>
+                </div>
+            `;
+        });
+    }
+
     let errorsHtml = '';
-    if(data.errors.length === 0) {
+    if(!data.errors || data.errors.length === 0) {
         errorsHtml = `<div style="text-align: center; color: var(--accent-emerald); padding: 1rem 0;">Normal 🟢 (No errors in 48h)</div>`;
     } else {
         data.errors.forEach(e => {
@@ -126,7 +191,7 @@ function renderDashboard() {
                 <div class="card-subtitle">Last Synced: ${master.last_update}</div>
             </div>
 
-            <!-- Pipeline Tracker (Menggantikan 2 Card Sebelumnya) -->
+            <!-- Pipeline Tracker -->
             <div class="glass-card" style="grid-column: 1 / -1;">
                 <div class="card-header">
                     <div class="card-title">
@@ -183,6 +248,53 @@ function renderDashboard() {
                 </div>
                 <div id="calendar-grid" class="calendar-grid">
                     ${historyHtml}
+                </div>
+            </div>
+
+            <!-- Archive Health & DB Storage Card (Ide A + Statistik) -->
+            <div class="glass-card" style="grid-column: 1 / -1;">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"></path><path d="M1 3h22v5H1z"></path><path d="M10 12h4"></path></svg>
+                        Archive Health & DB Storage
+                    </div>
+                    <span class="status-badge badge-green">Zero-Loss Engine</span>
+                </div>
+
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">Riwayat Penutupan Arsip Bulanan:</div>
+                    ${archiveHistoryHtml}
+                </div>
+
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 14px; margin-bottom: 2px;">Data Aktif di Database Saat Ini:</div>
+                <div class="stat-grid">
+                    <div class="stat-box">
+                        <div class="stat-box-title">Harga Saham Aktif</div>
+                        <div class="stat-box-value">${(archiveInfo.stats.total_harga || 0).toLocaleString('id-ID')}</div>
+                        <div class="stat-box-sub">Baris Terdaftar</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-box-title">Broker Summary Aktif</div>
+                        <div class="stat-box-value">${(archiveInfo.stats.total_broksum || 0).toLocaleString('id-ID')}</div>
+                        <div class="stat-box-sub">Baris Terdaftar</div>
+                    </div>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; text-align: right;">
+                    Rentang data: <strong style="color: var(--text-main);">${archiveInfo.stats.min_date}</strong> s.d. <strong style="color: var(--text-main);">${archiveInfo.stats.max_date}</strong>
+                </div>
+            </div>
+
+            <!-- Suspended / Gap Stock Monitor Card (Ide B) -->
+            <div class="glass-card" style="grid-column: 1 / -1;">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        Saham Suspensi / Gap IPOT
+                    </div>
+                    <span class="status-badge badge-info">${gapsList.length} Emiten</span>
+                </div>
+                <div class="gap-list">
+                    ${gapsHtml}
                 </div>
             </div>
 
