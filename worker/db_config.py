@@ -23,7 +23,8 @@ TEST_MODE = os.getenv("TEST_MODE", "false").lower() == "true"
 
 # ── Timezone Helper ─────────────────────────────────────────
 import pytz
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+from typing import Optional
 
 JKT_TZ = pytz.timezone("Asia/Jakarta")
 
@@ -32,6 +33,49 @@ def today_jkt() -> date:
 
 def now_jkt() -> datetime:
     return datetime.now(JKT_TZ)
+
+# ── Shared SQL Fragments (N2) ───────────────────────────────
+GAP_EXCLUDE_SQL = """
+    NOT EXISTS (
+        SELECT 1 FROM harvester_gaps g
+        WHERE g.ticker = h.ticker AND g.date = h.tanggal
+        AND g.attempts >= 3
+        AND g.last_attempt > :gap_threshold
+    )
+"""
+
+def get_last_completed_month() -> Optional[str]:
+    """Mengambil bulan terakhir (YYYY-MM) yang sudah berstatus completed."""
+    try:
+        with engine.connect() as conn:
+            res = conn.execute(text(
+                "SELECT MAX(month) FROM archive_status WHERE status IN ('completed', 'completed_force')"
+            )).scalar()
+            return res
+    except Exception as e:
+        logger.warning(f"⚠️ Gagal membaca archive_status: {e}")
+        return None
+
+def has_completed_archive() -> bool:
+    return get_last_completed_month() is not None
+
+def get_backfill_floor() -> date:
+    """
+    Batas bawah penarikan data (start_dt):
+    - Minimal 1 hari setelah akhir bulan yang sudah completed
+    - Dikunci minimal today - 45 hari (safety net)
+    """
+    today = today_jkt()
+    min_allowed = today - timedelta(days=45)
+    last_m = get_last_completed_month()
+    if last_m:
+        try:
+            y, mo = map(int, last_m.split('-'))
+            next_month_start = date(y + 1, 1, 1) if mo == 12 else date(y, mo + 1, 1)
+            return max(next_month_start, min_allowed)
+        except Exception:
+            return min_allowed
+    return min_allowed
 
 # ── Engine Creation ─────────────────────────────────────────
 if TEST_MODE:
@@ -215,6 +259,23 @@ def setup_tables():
                         traceback TEXT
                     )
                 """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS archive_status (
+                        month VARCHAR(7) PRIMARY KEY,
+                        status VARCHAR(20) NOT NULL,
+                        completed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS harvester_gaps (
+                        ticker TEXT NOT NULL,
+                        date DATE NOT NULL,
+                        reason TEXT,
+                        attempts INTEGER DEFAULT 1,
+                        last_attempt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (ticker, date)
+                    )
+                """))
             else:
                 # PostgreSQL branch
                 conn.execute(text("""
@@ -288,6 +349,23 @@ def setup_tables():
                         ticker VARCHAR(10),
                         error_message VARCHAR(255) NOT NULL,
                         traceback TEXT
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS archive_status (
+                        month VARCHAR(7) PRIMARY KEY,
+                        status VARCHAR(20) NOT NULL,
+                        completed_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS harvester_gaps (
+                        ticker VARCHAR(10) NOT NULL,
+                        date DATE NOT NULL,
+                        reason VARCHAR(50),
+                        attempts INT DEFAULT 1,
+                        last_attempt TIMESTAMPTZ DEFAULT NOW(),
+                        PRIMARY KEY (ticker, date)
                     )
                 """))
                 

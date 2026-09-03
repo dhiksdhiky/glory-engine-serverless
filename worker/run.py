@@ -70,6 +70,14 @@ def main():
             logger.error(f"❌ Harvester crash: {e}")
             harvester_success = False
 
+    # ── Step 4: Final Archiver Guarantee ────────────────────
+    if not daemon_mode:
+        try:
+            from archiver import archive_and_delete_old_data
+            archive_and_delete_old_data()
+        except Exception as e:
+            logger.error(f"❌ Final Archiver gagal: {e}")
+
     if not pipeline_success:
         logger.error("⚠️ Peringatan: Pipeline sempat gagal sebelumnya (lihat log di atas).")
 

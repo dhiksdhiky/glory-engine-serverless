@@ -24,7 +24,7 @@ from datetime import datetime, date, timedelta
 import pytz
 from sqlalchemy import text
 
-from db_config import engine, log_to_db, get_dialect, get_date_cutoff_sql, TEST_MODE
+from db_config import engine, log_to_db, get_date_cutoff_sql, TEST_MODE, get_backfill_floor
 
 logger = logging.getLogger("Pipeline")
 
@@ -104,16 +104,7 @@ def get_master_calendar(start_date: date, end_date: date) -> pd.DatetimeIndex:
         raise
 
 
-def cleanup_old_data():
-    """Hapus data harga >60 hari untuk menghemat storage (memberi ruang bagi archiver)."""
-    try:
-        cutoff_sql = get_date_cutoff_sql("tanggal", 60)
-        with engine.connect() as conn:
-            with conn.begin():
-                result = conn.execute(text(f"DELETE FROM harga_saham WHERE {cutoff_sql}"))
-                logger.info(f"🧹 Cleanup: {result.rowcount} baris data lama dihapus.")
-    except Exception as e:
-        logger.warning(f"⚠️ Cleanup gagal (non-fatal): {e}")
+
 
 
 def run_pipeline():
@@ -148,12 +139,13 @@ def run_pipeline():
     except Exception as e:
         logger.warning(f"⚠️ Gagal baca last dates (fresh start): {e}")
 
-    # ── Setup waktu ─────────────────────────────────────────
+    # ── Setup waktu & Floor Dinamis ─────────────────────────
     now_jkt = datetime.now(JKT_TZ)
     api_end_date = now_jkt.date() + timedelta(days=1)
     
-    # Batas pengaman jika DB benar-benar kosong
-    min_date = now_jkt.date() - timedelta(days=LOOKBACK_DAYS)
+    # Batas pengaman dinamis: minimal 1 hari setelah bulan terakhir completed
+    backfill_floor = get_backfill_floor()
+    min_date = backfill_floor
 
     try:
         master_calendar = get_master_calendar(min_date, api_end_date)
@@ -172,15 +164,14 @@ def run_pipeline():
         try:
             last_date = last_update_dates.get(ticker_code)
             
-            start_dt = min_date
+            start_dt = backfill_floor
             if last_date:
                 if isinstance(last_date, str):
                     last_date = datetime.strptime(last_date, "%Y-%m-%d").date()
                 
-                # Ambil dari 5 hari SEBELUM data terakhir, tanpa dibatasi jendela 30 hari
+                # Ambil dari 5 hari SEBELUM data terakhir, clamped oleh backfill_floor
                 start_dt_calc = last_date - timedelta(days=5)
-                # Batasi agar tidak mendownload 2 tahun saat fresh start
-                start_dt = max(start_dt_calc, min_date)
+                start_dt = max(start_dt_calc, backfill_floor)
 
             data_raw = yf.download(
                 ticker_yf, start=start_dt, end=api_end_date,
@@ -222,6 +213,13 @@ def run_pipeline():
                 'close': data_reindexed['Close'].values,
                 'volume': data_reindexed['Volume'].values
             })
+            
+            # Post-filter pertahanan berlapis: buang baris tanggal < backfill_floor
+            data_clean = data_clean[data_clean['tanggal'] >= backfill_floor]
+            if data_clean.empty:
+                skip_count += 1
+                continue
+
             all_data.extend(data_clean.to_dict(orient='records'))
 
             logger.info(
@@ -271,8 +269,7 @@ def run_pipeline():
     else:
         logger.warning("⚠️ Tidak ada data untuk di-insert.")
 
-    # ── Cleanup ─────────────────────────────────────────────
-    cleanup_old_data()
+    # ── Selesai (Otoritas hapus diserahkan 100% ke Archiver - F6) ────
 
     logger.info("═══════════════════════════════════════════")
     logger.info(f"  📈 PIPELINE SELESAI | ✅ {success_count} | ⚠️ {skip_count} skip | ❌ {error_count} error")
